@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -64,6 +65,11 @@
 
         button:active {
             transform: scale(0.98);
+        }
+
+        .play-button {
+            background: #1769aa;
+            display: none;
         }
 
         .status {
@@ -139,6 +145,14 @@
     </div>
 
 
+    <button
+        id="playButton"
+        class="play-button"
+        onclick="playLastTranslation()">
+        🔊 播放翻譯結果
+    </button>
+
+
     <div class="result">
 
         <div class="label">
@@ -178,6 +192,38 @@ const SpeechRecognition =
     window.SpeechRecognition ||
     window.webkitSpeechRecognition;
 
+let lastTranslation = "";
+let lastVoiceLanguage = "";
+
+
+/* ================================
+   啟用 iPhone Safari 語音
+================================ */
+
+function unlockSpeech() {
+
+    if (!window.speechSynthesis) {
+        return;
+    }
+
+    const unlockUtterance =
+        new SpeechSynthesisUtterance(" ");
+
+    unlockUtterance.volume = 0;
+
+    unlockUtterance.rate = 10;
+
+    window.speechSynthesis.cancel();
+
+    window.speechSynthesis.speak(
+        unlockUtterance
+    );
+}
+
+
+/* ================================
+   開始翻譯
+================================ */
 
 async function startTranslation(
     speechLanguage,
@@ -185,100 +231,173 @@ async function startTranslation(
     voiceLanguage
 ) {
 
+    /* 使用者按下按鈕的瞬間先啟用語音 */
+    unlockSpeech();
+
+
     if (!SpeechRecognition) {
 
         document.getElementById("status").innerText =
-            "⚠️ 此瀏覽器不支援語音辨識，請使用支援語音辨識的瀏覽器。";
+            "⚠️ 此瀏覽器不支援語音辨識，請改用 Safari。";
 
         return;
     }
 
 
-    const recognition = new SpeechRecognition();
+    const recognition =
+        new SpeechRecognition();
 
-    recognition.lang = speechLanguage;
 
-    recognition.interimResults = false;
+    recognition.lang =
+        speechLanguage;
 
-    recognition.continuous = false;
+
+    recognition.interimResults =
+        false;
+
+
+    recognition.continuous =
+        false;
 
 
     document.getElementById("status").innerText =
         "🎤 正在聽，請開始說話...";
 
 
-    recognition.start();
+    document.getElementById("playButton").style.display =
+        "none";
 
 
-    recognition.onresult = async function(event) {
+    try {
 
-        const text =
-            event.results[0][0].transcript;
+        recognition.start();
 
+    }
 
-        document.getElementById("original").innerText =
-            text;
-
-
-        document.getElementById("status").innerText =
-            "🌐 正在翻譯...";
-
-
-        const translated =
-            await translateText(
-                text,
-                languagePair
-            );
-
-
-        if (translated) {
-
-            document.getElementById("translated").innerText =
-                translated;
-
-
-            document.getElementById("status").innerText =
-                "🔊 正在播放翻譯結果...";
-
-
-            speakText(
-                translated,
-                voiceLanguage
-            );
-
-        } else {
-
-            document.getElementById("status").innerText =
-                "⚠️ 翻譯失敗，請再試一次。";
-        }
-
-    };
-
-
-    recognition.onerror = function(event) {
+    catch (error) {
 
         document.getElementById("status").innerText =
-            "⚠️ 語音辨識發生問題：" + event.error;
+            "⚠️ 無法開始麥克風，請再按一次。";
 
-    };
+        return;
+
+    }
 
 
-    recognition.onend = function() {
+    recognition.onresult =
+        async function(event) {
 
-        if (
-            document.getElementById("status").innerText ===
-            "🎤 正在聽，請開始說話..."
-        ) {
+            const text =
+                event.results[0][0].transcript;
+
+
+            document.getElementById("original").innerText =
+                text;
+
 
             document.getElementById("status").innerText =
-                "沒有聽到內容，請再試一次。";
+                "🌐 正在翻譯...";
 
-        }
 
-    };
+            const translated =
+                await translateText(
+                    text,
+                    languagePair
+                );
+
+
+            if (translated) {
+
+                document.getElementById("translated").innerText =
+                    translated;
+
+
+                lastTranslation =
+                    translated;
+
+
+                lastVoiceLanguage =
+                    voiceLanguage;
+
+
+                document.getElementById("status").innerText =
+                    "🔊 正在播放翻譯結果...";
+
+
+                /* 嘗試自動播放 */
+                speakText(
+                    translated,
+                    voiceLanguage
+                );
+
+            }
+
+            else {
+
+                document.getElementById("status").innerText =
+                    "⚠️ 翻譯失敗，請再試一次。";
+
+            }
+
+        };
+
+
+    recognition.onerror =
+        function(event) {
+
+            let message =
+                "⚠️ 語音辨識發生問題：";
+
+
+            if (event.error === "not-allowed") {
+
+                message =
+                    "⚠️ 請允許 Safari 使用麥克風。";
+
+            }
+
+            else if (event.error === "no-speech") {
+
+                message =
+                    "⚠️ 沒有聽到聲音，請再試一次。";
+
+            }
+
+            else {
+
+                message +=
+                    event.error;
+
+            }
+
+
+            document.getElementById("status").innerText =
+                message;
+
+        };
+
+
+    recognition.onend =
+        function() {
+
+            if (
+                document.getElementById("status").innerText ===
+                "🎤 正在聽，請開始說話..."
+            ) {
+
+                document.getElementById("status").innerText =
+                    "沒有聽到內容，請再試一次。";
+
+            }
+
+        };
 
 }
 
+
+/* ================================
+   翻譯
+================================ */
 
 async function translateText(
     text,
@@ -328,10 +447,26 @@ async function translateText(
 }
 
 
+/* ================================
+   播放語音
+================================ */
+
 function speakText(
     text,
     language
 ) {
+
+    if (!window.speechSynthesis) {
+
+        document.getElementById("status").innerText =
+            "⚠️ 此裝置不支援語音播放。";
+
+        showPlayButton();
+
+        return;
+
+    }
+
 
     window.speechSynthesis.cancel();
 
@@ -340,19 +475,67 @@ function speakText(
         new SpeechSynthesisUtterance(text);
 
 
-    utterance.lang = language;
-
-    utterance.rate = 0.9;
-
-    utterance.pitch = 1;
+    utterance.lang =
+        language;
 
 
-    utterance.onend = function() {
+    utterance.rate =
+        0.9;
 
-        document.getElementById("status").innerText =
-            "✅ 完成！可以再選擇一次翻譯。";
 
-    };
+    utterance.pitch =
+        1;
+
+
+    utterance.volume =
+        1;
+
+
+    utterance.onstart =
+        function() {
+
+            document.getElementById("status").innerText =
+                "🔊 正在播放翻譯結果...";
+
+            document.getElementById("playButton").style.display =
+                "none";
+
+        };
+
+
+    utterance.onend =
+        function() {
+
+            document.getElementById("status").innerText =
+                "✅ 完成！可以再選擇一次翻譯。";
+
+            document.getElementById("playButton").style.display =
+                "none";
+
+        };
+
+
+    utterance.onerror =
+        function(event) {
+
+            console.log(
+                "語音播放錯誤：",
+                event
+            );
+
+
+            document.getElementById("status").innerText =
+                "🔊 請按下面按鈕播放翻譯結果。";
+
+
+            showPlayButton();
+
+        };
+
+
+    /* 確保 Safari 已經載入語音 */
+    const voices =
+        window.speechSynthesis.getVoices();
 
 
     window.speechSynthesis.speak(
@@ -361,7 +544,61 @@ function speakText(
 
 }
 
+
+/* ================================
+   顯示手動播放按鈕
+================================ */
+
+function showPlayButton() {
+
+    document.getElementById("playButton").style.display =
+        "block";
+
+}
+
+
+/* ================================
+   手動播放
+================================ */
+
+function playLastTranslation() {
+
+    if (
+        lastTranslation &&
+        lastVoiceLanguage
+    ) {
+
+        speakText(
+            lastTranslation,
+            lastVoiceLanguage
+        );
+
+    }
+
+}
+
+
+/* ================================
+   預先載入 Safari 語音
+================================ */
+
+if (
+    window.speechSynthesis
+) {
+
+    window.speechSynthesis.getVoices();
+
+    window.speechSynthesis.onvoiceschanged =
+        function() {
+
+            window.speechSynthesis.getVoices();
+
+        };
+
+}
+
 </script>
 
 </body>
 </html>
+```
