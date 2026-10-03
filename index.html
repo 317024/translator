@@ -1,6 +1,7 @@
 ```html
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
 <title>「導」向世界｜雙語自動對話</title>
 
 <style>
+
 * {
     box-sizing: border-box;
 }
@@ -63,10 +65,6 @@ button {
     color: white;
 }
 
-button:active {
-    transform: scale(0.98);
-}
-
 .start {
     background: #1769aa;
     font-size: 23px;
@@ -81,7 +79,7 @@ button:active {
 .status {
     text-align: center;
     margin: 20px 0;
-    font-size: 19px;
+    font-size: 18px;
     min-height: 30px;
     font-weight: bold;
 }
@@ -106,6 +104,13 @@ button:active {
     word-break: break-word;
 }
 
+.language {
+    text-align: center;
+    font-size: 18px;
+    color: #1769aa;
+    margin-top: 10px;
+}
+
 .small {
     text-align: center;
     color: #777;
@@ -113,14 +118,19 @@ button:active {
     margin-top: 25px;
 }
 
-.direction {
+.loading {
+    background: #fff4d6;
+    color: #7a5600;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 15px;
     text-align: center;
-    font-size: 18px;
-    margin-top: 10px;
-    color: #1769aa;
+    display: none;
 }
+
 </style>
 </head>
+
 
 <body>
 
@@ -132,19 +142,20 @@ button:active {
 雙語自動對話翻譯助手
 </div>
 
+
 <div class="mode">
 
-<h2>🗣️ 雙向對話模式</h2>
+<h2>🗣️ 自動語言辨識</h2>
 
-<div class="direction" id="direction">
-準備開始
+<div class="language" id="language">
+尚未開始
 </div>
 
 <button
 class="start"
 id="startButton"
 onclick="startConversation()">
-🎤 開始雙向對話
+🎤 開始雙向自動翻譯
 </button>
 
 <button
@@ -154,16 +165,24 @@ onclick="stopConversation()">
 ⏹️ 停止對話
 </button>
 
+<div
+class="loading"
+id="loading">
+第一次使用需要載入語音辨識模型，請稍候……
 </div>
 
-<div class="status" id="status">
-請按「開始雙向對話」
 </div>
+
+
+<div class="status" id="status">
+請按「開始雙向自動翻譯」
+</div>
+
 
 <div class="result">
 
 <div class="label">
-你說：
+🎤 偵測到的原文
 </div>
 
 <div class="text" id="original">
@@ -172,10 +191,11 @@ onclick="stopConversation()">
 
 </div>
 
+
 <div class="result">
 
 <div class="label">
-翻譯結果：
+🌐 翻譯結果
 </div>
 
 <div class="text" id="translated">
@@ -184,131 +204,236 @@ onclick="stopConversation()">
 
 </div>
 
+
 <div class="small">
-目前版本需要網路連線
+需要網路連線<br>
+語音辨識模型會在第一次使用時下載並快取
 </div>
 
 </div>
 
 
-<script>
+<script type="module">
 
-const SpeechRecognition =
-    window.SpeechRecognition ||
-    window.webkitSpeechRecognition;
+/*
+==================================================
+載入 Transformers.js
+==================================================
+*/
+
+import {
+    pipeline
+} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
 
 
-/* ================================
-   全域變數
-================================ */
+/*
+==================================================
+全域變數
+==================================================
+*/
+
+let transcriber = null;
 
 let conversationRunning = false;
 
-let currentTurn = "zh";
+let mediaRecorder = null;
 
-let recognition = null;
+let audioChunks = [];
 
-let lastTranslation = "";
-
-let lastVoiceLanguage = "";
+let stream = null;
 
 
-/* ================================
-   開始雙向對話
-================================ */
+/*
+==================================================
+載入 Whisper
+==================================================
+*/
 
-function startConversation() {
+async function loadWhisper() {
 
-    if (!SpeechRecognition) {
+    if (transcriber) {
+        return true;
+    }
+
+    document.getElementById("loading").style.display =
+        "block";
+
+    document.getElementById("status").innerText =
+        "🧠 正在載入自動語言辨識模型……";
+
+    try {
+
+        transcriber = await pipeline(
+            "automatic-speech-recognition",
+            "Xenova/whisper-tiny",
+            {
+                dtype: "q8"
+            }
+        );
+
+        document.getElementById("loading").style.display =
+            "none";
+
+        return true;
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        document.getElementById("loading").style.display =
+            "none";
 
         document.getElementById("status").innerText =
-            "⚠️ 此瀏覽器不支援語音辨識，請使用 iPhone Safari。";
+            "⚠️ 語音辨識模型載入失敗";
 
+        return false;
+    }
+
+}
+
+
+/*
+==================================================
+開始
+==================================================
+*/
+
+window.startConversation = async function() {
+
+    if (conversationRunning) {
         return;
     }
 
 
     conversationRunning = true;
 
-    currentTurn = "zh";
+
+    document.getElementById("startButton")
+        .style.display = "none";
+
+    document.getElementById("stopButton")
+        .style.display = "block";
 
 
-    document.getElementById("startButton").style.display =
-        "none";
+    document.getElementById("language")
+        .innerText = "🔍 自動偵測語言";
 
-    document.getElementById("stopButton").style.display =
-        "block";
+
+    /*
+    取得麥克風
+    */
+
+    try {
+
+        stream =
+            await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        document.getElementById("status").innerText =
+            "⚠️ 請允許網站使用麥克風";
+
+        stopConversation();
+
+        return;
+    }
+
+
+    /*
+    載入 Whisper
+    */
+
+    const loaded =
+        await loadWhisper();
+
+
+    if (!loaded) {
+
+        stopConversation();
+
+        return;
+    }
 
 
     document.getElementById("status").innerText =
-        "🎤 請說中文";
+        "🎤 請開始說話";
 
 
-    document.getElementById("direction").innerText =
-        "🇨🇳 中文 → 🇬🇧 English";
+    /*
+    開始第一次聆聽
+    */
+
+    listen();
+
+};
 
 
-    unlockSpeech();
+/*
+==================================================
+停止
+==================================================
+*/
 
-
-    setTimeout(function() {
-
-        listen();
-
-    }, 500);
-
-}
-
-
-/* ================================
-   停止
-================================ */
-
-function stopConversation() {
+window.stopConversation = function() {
 
     conversationRunning = false;
 
 
-    if (recognition) {
+    if (mediaRecorder) {
 
         try {
-
-            recognition.stop();
-
+            mediaRecorder.stop();
         }
 
-        catch (error) {
+        catch(error) {}
 
-            console.log(error);
+        mediaRecorder = null;
+    }
 
-        }
 
+    if (stream) {
+
+        stream.getTracks().forEach(
+            track => track.stop()
+        );
+
+        stream = null;
     }
 
 
     window.speechSynthesis.cancel();
 
 
-    document.getElementById("startButton").style.display =
-        "block";
+    document.getElementById("startButton")
+        .style.display = "block";
 
-    document.getElementById("stopButton").style.display =
-        "none";
-
-
-    document.getElementById("status").innerText =
-        "⏹️ 對話已停止";
+    document.getElementById("stopButton")
+        .style.display = "none";
 
 
-    document.getElementById("direction").innerText =
-        "準備開始";
-
-}
+    document.getElementById("language")
+        .innerText = "已停止";
 
 
-/* ================================
-   開始聆聽
-================================ */
+    document.getElementById("status")
+        .innerText = "⏹️ 對話已停止";
+
+};
+
+
+/*
+==================================================
+開始錄音
+==================================================
+*/
 
 function listen() {
 
@@ -317,252 +442,357 @@ function listen() {
     }
 
 
-    recognition =
-        new SpeechRecognition();
-
-
-    if (currentTurn === "zh") {
-
-        recognition.lang =
-            "zh-TW";
-
-        document.getElementById("status").innerText =
-            "🎤 請說中文";
-
-        document.getElementById("direction").innerText =
-            "🇨🇳 中文 → 🇬🇧 English";
-
-    }
-
-    else {
-
-        recognition.lang =
-            "en-US";
-
-        document.getElementById("status").innerText =
-            "🎤 Please speak English";
-
-        document.getElementById("direction").innerText =
-            "🇬🇧 English → 🇨🇳 中文";
-
-    }
-
-
-    recognition.interimResults =
-        false;
-
-    recognition.continuous =
-        false;
+    audioChunks = [];
 
 
     try {
 
-        recognition.start();
+        mediaRecorder =
+            new MediaRecorder(stream);
 
     }
 
-    catch (error) {
+    catch(error) {
 
-        console.log(error);
+        console.error(error);
 
+        document.getElementById("status")
+            .innerText =
+            "⚠️ 此瀏覽器不支援錄音功能";
+
+        return;
     }
 
 
-    recognition.onresult =
-        async function(event) {
-
-            const text =
-                event.results[0][0].transcript;
-
-
-            document.getElementById("original").innerText =
-                text;
-
-
-            document.getElementById("status").innerText =
-                "🌐 正在翻譯...";
-
-
-            let languagePair;
-
-            let voiceLanguage;
-
-
-            if (currentTurn === "zh") {
-
-                languagePair =
-                    "zh-TW|en-GB";
-
-                voiceLanguage =
-                    "en-US";
-
-            }
-
-            else {
-
-                languagePair =
-                    "en-US|zh-TW";
-
-                voiceLanguage =
-                    "zh-TW";
-
-            }
-
-
-            const translated =
-                await translateText(
-                    text,
-                    languagePair
-                );
-
-
-            if (!conversationRunning) {
-                return;
-            }
-
-
-            if (translated) {
-
-                document.getElementById("translated").innerText =
-                    translated;
-
-
-                lastTranslation =
-                    translated;
-
-
-                lastVoiceLanguage =
-                    voiceLanguage;
-
-
-                document.getElementById("status").innerText =
-                    "🔊 正在播放翻譯結果...";
-
-
-                speakText(
-                    translated,
-                    voiceLanguage,
-                    function() {
-
-                        if (!conversationRunning) {
-                            return;
-                        }
-
-
-                        /*
-
-                        中文說完
-                        → 換英文
-
-                        英文說完
-                        → 換中文
-
-                        */
-
-                        if (currentTurn === "zh") {
-
-                            currentTurn =
-                                "en";
-
-                        }
-
-                        else {
-
-                            currentTurn =
-                                "zh";
-
-                        }
-
-
-                        setTimeout(function() {
-
-                            listen();
-
-                        }, 800);
-
-                    }
-
-                );
-
-            }
-
-            else {
-
-                document.getElementById("status").innerText =
-                    "⚠️ 翻譯失敗，準備再試一次。";
-
-
-                setTimeout(function() {
-
-                    listen();
-
-                }, 1500);
-
-            }
-
-        };
-
-
-    recognition.onerror =
+    mediaRecorder.ondataavailable =
         function(event) {
 
-            console.log(
-                "Speech recognition error:",
-                event.error
-            );
+            if (event.data.size > 0) {
 
+                audioChunks.push(
+                    event.data
+                );
+
+            }
+
+        };
+
+
+    mediaRecorder.onstop =
+        async function() {
 
             if (!conversationRunning) {
                 return;
             }
 
 
-            if (
-                event.error ===
-                "not-allowed"
-            ) {
-
-                document.getElementById("status").innerText =
-                    "⚠️ 請允許 Safari 使用麥克風。";
-
-                return;
-
-            }
+            document.getElementById("status")
+                .innerText =
+                "🧠 正在辨識語言與文字……";
 
 
-            if (
-                event.error ===
-                "no-speech"
-            ) {
-
-                document.getElementById("status").innerText =
-                    "⚠️ 沒有聽到聲音，再試一次...";
-
-
-                setTimeout(function() {
-
-                    listen();
-
-                }, 1000);
+            const audioBlob =
+                new Blob(
+                    audioChunks,
+                    {
+                        type:
+                        mediaRecorder.mimeType
+                    }
+                );
 
 
-                return;
-
-            }
-
-
-            document.getElementById("status").innerText =
-                "⚠️ 語音辨識發生問題：" +
-                event.error;
+            await processAudio(
+                audioBlob
+            );
 
         };
+
+
+    mediaRecorder.start();
+
+
+    document.getElementById("status")
+        .innerText =
+        "🎤 正在聆聽……";
+
+
+    /*
+    每次先錄 5 秒
+    */
+
+    setTimeout(function() {
+
+        if (
+            conversationRunning &&
+            mediaRecorder &&
+            mediaRecorder.state === "recording"
+        ) {
+
+            mediaRecorder.stop();
+
+        }
+
+    }, 5000);
 
 }
 
 
-/* ================================
-   翻譯
-================================ */
+/*
+==================================================
+處理語音
+==================================================
+*/
+
+async function processAudio(blob) {
+
+    if (!conversationRunning) {
+        return;
+    }
+
+
+    try {
+
+        /*
+        將錄音轉成 WAV
+        */
+
+        const audio =
+            await blobToAudioData(blob);
+
+
+        /*
+        Whisper 自動辨識
+        language 不指定
+        → 自動偵測
+        */
+
+        const result =
+            await transcriber(
+                audio,
+                {
+                    return_timestamps: false
+                }
+            );
+
+
+        const text =
+            result.text.trim();
+
+
+        if (!text) {
+
+            document.getElementById("status")
+                .innerText =
+                "⚠️ 沒有聽清楚，再說一次";
+
+
+            setTimeout(
+                listen,
+                500
+            );
+
+            return;
+        }
+
+
+        document.getElementById("original")
+            .innerText = text;
+
+
+        /*
+        ==========================================
+        判斷中文 / 英文
+        ==========================================
+        */
+
+        const language =
+            detectLanguage(text);
+
+
+        if (language === "zh") {
+
+            document.getElementById("language")
+                .innerText =
+                "🇨🇳 偵測到中文 → 自動翻譯成英文";
+
+        }
+
+        else {
+
+            document.getElementById("language")
+                .innerText =
+                "🇬🇧 偵測到英文 → 自動翻譯成中文";
+
+        }
+
+
+        document.getElementById("status")
+            .innerText =
+            "🌐 正在翻譯……";
+
+
+        /*
+        翻譯
+        */
+
+        let pair;
+
+
+        if (language === "zh") {
+
+            pair = "zh-TW|en";
+
+        }
+
+        else {
+
+            pair = "en|zh-TW";
+
+        }
+
+
+        const translated =
+            await translateText(
+                text,
+                pair
+            );
+
+
+        if (!translated) {
+
+            document.getElementById("status")
+                .innerText =
+                "⚠️ 翻譯失敗";
+
+
+            setTimeout(
+                listen,
+                1000
+            );
+
+            return;
+        }
+
+
+        document.getElementById("translated")
+            .innerText =
+            translated;
+
+
+        document.getElementById("status")
+            .innerText =
+            "🔊 正在播放翻譯結果……";
+
+
+        /*
+        播放
+        */
+
+        speakText(
+            translated,
+            language === "zh"
+                ? "en-US"
+                : "zh-TW",
+            function() {
+
+                if (!conversationRunning) {
+                    return;
+                }
+
+
+                /*
+                播放完後自動再次聆聽
+                */
+
+                setTimeout(
+                    listen,
+                    500
+                );
+
+            }
+        );
+
+    }
+
+    catch(error) {
+
+        console.error(error);
+
+        document.getElementById("status")
+            .innerText =
+            "⚠️ 語音辨識發生問題";
+
+
+        setTimeout(
+            listen,
+            1000
+        );
+
+    }
+
+}
+
+
+/*
+==================================================
+中文 / 英文判斷
+==================================================
+*/
+
+function detectLanguage(text) {
+
+    /*
+    中文 Unicode 範圍
+    */
+
+    const chineseMatches =
+        text.match(
+            /[\u4e00-\u9fff]/g
+        );
+
+
+    const chineseCount =
+        chineseMatches
+            ? chineseMatches.length
+            : 0;
+
+
+    /*
+    英文字母
+    */
+
+    const englishMatches =
+        text.match(
+            /[A-Za-z]/g
+        );
+
+
+    const englishCount =
+        englishMatches
+            ? englishMatches.length
+            : 0;
+
+
+    if (
+        chineseCount >
+        englishCount
+    ) {
+
+        return "zh";
+
+    }
+
+
+    return "en";
+
+}
+
+
+/*
+==================================================
+翻譯
+==================================================
+*/
 
 async function translateText(
     text,
@@ -601,9 +831,9 @@ async function translateText(
 
     }
 
-    catch (error) {
+    catch(error) {
 
-        console.log(error);
+        console.error(error);
 
         return null;
 
@@ -612,9 +842,11 @@ async function translateText(
 }
 
 
-/* ================================
-   語音播放
-================================ */
+/*
+==================================================
+文字轉語音
+==================================================
+*/
 
 function speakText(
     text,
@@ -622,10 +854,13 @@ function speakText(
     onFinished
 ) {
 
-    if (!window.speechSynthesis) {
+    if (
+        !window.speechSynthesis
+    ) {
 
-        document.getElementById("status").innerText =
-            "⚠️ 此裝置不支援語音播放。";
+        document.getElementById("status")
+            .innerText =
+            "⚠️ 此裝置不支援語音播放";
 
         return;
 
@@ -657,45 +892,27 @@ function speakText(
         1;
 
 
-    utterance.onstart =
-        function() {
-
-            document.getElementById("status").innerText =
-                "🔊 正在播放翻譯結果...";
-
-        };
-
-
     utterance.onend =
         function() {
 
             if (onFinished) {
-
                 onFinished();
-
             }
 
         };
 
 
     utterance.onerror =
-        function(event) {
+        function(error) {
 
-            console.log(
-                "Speech synthesis error:",
-                event
-            );
-
-
-            document.getElementById("status").innerText =
-                "⚠️ 語音播放失敗";
+            console.error(error);
 
 
             if (onFinished) {
 
                 setTimeout(
                     onFinished,
-                    1000
+                    500
                 );
 
             }
@@ -710,35 +927,117 @@ function speakText(
 }
 
 
-/* ================================
-   iPhone Safari 語音啟用
-================================ */
+/*
+==================================================
+Blob → Float32Array
+==================================================
+*/
 
-function unlockSpeech() {
+async function blobToAudioData(blob) {
 
-    if (!window.speechSynthesis) {
-        return;
-    }
+    const arrayBuffer =
+        await blob.arrayBuffer();
 
 
-    const utterance =
-        new SpeechSynthesisUtterance(
-            " "
+    const audioContext =
+        new (
+            window.AudioContext ||
+            window.webkitAudioContext
+        )();
+
+
+    const audioBuffer =
+        await audioContext.decodeAudioData(
+            arrayBuffer
         );
 
 
-    utterance.volume =
-        0;
+    /*
+    Whisper 使用單聲道
+    */
+
+    const channel =
+        audioBuffer.getChannelData(0);
 
 
-    window.speechSynthesis.cancel();
+    /*
+    Whisper 需要 16000 Hz
+    */
+
+    if (
+        audioBuffer.sampleRate === 16000
+    ) {
+
+        return channel;
+
+    }
 
 
-    window.speechSynthesis.speak(
-        utterance
-    );
+    /*
+    重取樣
+    */
+
+    const ratio =
+        16000 /
+        audioBuffer.sampleRate;
+
+
+    const newLength =
+        Math.floor(
+            channel.length * ratio
+        );
+
+
+    const result =
+        new Float32Array(
+            newLength
+        );
+
+
+    for (
+        let i = 0;
+        i < newLength;
+        i++
+    ) {
+
+        const index =
+            Math.floor(
+                i / ratio
+            );
+
+
+        result[i] =
+            channel[index];
+
+    }
+
+
+    return result;
 
 }
+
+
+/*
+==================================================
+頁面載入
+==================================================
+*/
+
+window.addEventListener(
+    "beforeunload",
+    function() {
+
+        if (stream) {
+
+            stream.getTracks().forEach(
+                track =>
+                track.stop()
+            );
+
+        }
+
+    }
+);
 
 </script>
 
