@@ -1,403 +1,272 @@
 ```html
 <!DOCTYPE html>
 <html lang="zh-TW">
-
 <head>
-
 <meta charset="UTF-8">
-
-<meta name="viewport"
-content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>「導」向世界｜雙語自動對話</title>
 
 <style>
-
 * {
     box-sizing: border-box;
 }
 
 body {
-
     margin: 0;
-
-    font-family:
-    Arial,
-    "Microsoft JhengHei",
-    sans-serif;
-
+    font-family: Arial, "Microsoft JhengHei", sans-serif;
     background: #f5f7fa;
-
     color: #222;
 }
 
 .container {
-
     max-width: 600px;
-
     margin: auto;
-
     padding: 25px 18px;
 }
 
 h1 {
-
     text-align: center;
-
     font-size: 30px;
-
     margin-bottom: 8px;
 }
 
 .subtitle {
-
     text-align: center;
-
     color: #555;
-
     margin-bottom: 25px;
 }
 
 .mode {
-
     background: white;
-
     border-radius: 18px;
-
     padding: 22px;
-
     margin-bottom: 18px;
-
-    box-shadow:
-    0 3px 12px
-    rgba(0,0,0,0.08);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.08);
 }
 
 .mode h2 {
-
     margin-top: 0;
-
     font-size: 22px;
 }
 
 button {
-
     width: 100%;
-
     padding: 18px;
-
     margin-top: 10px;
-
     border: none;
-
     border-radius: 14px;
-
     font-size: 20px;
-
     font-weight: bold;
-
     cursor: pointer;
-
     background: #222;
-
     color: white;
 }
 
+button:active {
+    transform: scale(0.98);
+}
+
 .start {
-
     background: #1769aa;
-
     font-size: 23px;
-
     padding: 22px;
 }
 
 .stop {
-
     background: #b3261e;
-
     display: none;
 }
 
 .status {
-
     text-align: center;
-
     margin: 20px 0;
-
-    font-size: 18px;
-
+    font-size: 19px;
     min-height: 30px;
-
     font-weight: bold;
 }
 
-.language {
-
-    text-align: center;
-
-    font-size: 18px;
-
-    color: #1769aa;
-
-    margin-top: 10px;
-
-    min-height: 28px;
-}
-
 .result {
-
     background: white;
-
     border-radius: 18px;
-
     padding: 20px;
-
     margin-top: 18px;
-
-    box-shadow:
-    0 3px 12px
-    rgba(0,0,0,0.08);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.08);
 }
 
 .label {
-
     font-size: 15px;
-
     color: #666;
-
     margin-bottom: 8px;
 }
 
 .text {
-
     font-size: 21px;
-
     line-height: 1.6;
-
     word-break: break-word;
 }
 
 .small {
-
     text-align: center;
-
     color: #777;
-
     font-size: 14px;
-
     margin-top: 25px;
 }
 
+.direction {
+    text-align: center;
+    font-size: 18px;
+    margin-top: 10px;
+    color: #1769aa;
+}
 </style>
-
 </head>
-
 
 <body>
 
-
 <div class="container">
 
-
-<h1>
-「導」向世界
-</h1>
-
+<h1>「導」向世界</h1>
 
 <div class="subtitle">
 雙語自動對話翻譯助手
 </div>
 
-
 <div class="mode">
 
+<h2>🗣️ 雙向對話模式</h2>
 
-<h2>
-🗣️ 自動雙向對話
-</h2>
-
-
-<div
-class="language"
-id="language">
-
-尚未開始
-
+<div class="direction" id="direction">
+準備開始
 </div>
-
 
 <button
 class="start"
 id="startButton"
 onclick="startConversation()">
-
-🎤 開始自動對話
-
+🎤 開始雙向對話
 </button>
-
 
 <button
 class="stop"
 id="stopButton"
 onclick="stopConversation()">
-
 ⏹️ 停止對話
-
 </button>
 
-
 </div>
 
-
-<div
-class="status"
-id="status">
-
-請按「開始自動對話」
-
+<div class="status" id="status">
+請按「開始雙向對話」
 </div>
-
 
 <div class="result">
 
 <div class="label">
-
-🎤 聽到的內容
-
+你說：
 </div>
 
-<div
-class="text"
-id="original">
-
+<div class="text" id="original">
 尚未開始
-
 </div>
 
 </div>
-
 
 <div class="result">
 
 <div class="label">
-
-🌐 翻譯結果
-
+翻譯結果：
 </div>
 
-<div
-class="text"
-id="translated">
-
+<div class="text" id="translated">
 尚未翻譯
-
 </div>
 
 </div>
-
 
 <div class="small">
-
-需要網路連線
-
+目前版本需要網路連線
 </div>
 
-
 </div>
-
 
 
 <script>
 
-
-/*
-========================================
-基本設定
-========================================
-*/
-
-
 const SpeechRecognition =
-window.SpeechRecognition ||
-window.webkitSpeechRecognition;
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
 
+
+/* ================================
+   全域變數
+================================ */
+
+let conversationRunning = false;
+
+let currentTurn = "zh";
 
 let recognition = null;
 
-let running = false;
+let lastTranslation = "";
 
-let listening = false;
+let lastVoiceLanguage = "";
 
 
-/*
-========================================
-開始
-========================================
-*/
-
+/* ================================
+   開始雙向對話
+================================ */
 
 function startConversation() {
 
-
     if (!SpeechRecognition) {
 
-        document.getElementById("status")
-        .innerText =
-        "⚠️ 此瀏覽器不支援語音辨識，請使用 iPhone Safari。";
+        document.getElementById("status").innerText =
+            "⚠️ 此瀏覽器不支援語音辨識，請使用 iPhone Safari。";
 
         return;
-
     }
 
 
-    running = true;
+    conversationRunning = true;
+
+    currentTurn = "zh";
 
 
-    document.getElementById(
-        "startButton"
-    ).style.display = "none";
+    document.getElementById("startButton").style.display =
+        "none";
+
+    document.getElementById("stopButton").style.display =
+        "block";
 
 
-    document.getElementById(
-        "stopButton"
-    ).style.display = "block";
+    document.getElementById("status").innerText =
+        "🎤 請說中文";
 
 
-    document.getElementById(
-        "language"
-    ).innerText =
-    "🔍 自動偵測語言";
-
-
-    document.getElementById(
-        "status"
-    ).innerText =
-    "🎤 請開始說話";
+    document.getElementById("direction").innerText =
+        "🇨🇳 中文 → 🇬🇧 English";
 
 
     unlockSpeech();
 
 
-    listen();
+    setTimeout(function() {
+
+        listen();
+
+    }, 500);
 
 }
 
 
-
-/*
-========================================
-停止
-========================================
-*/
-
+/* ================================
+   停止
+================================ */
 
 function stopConversation() {
 
-
-    running = false;
-
-    listening = false;
+    conversationRunning = false;
 
 
     if (recognition) {
@@ -408,7 +277,7 @@ function stopConversation() {
 
         }
 
-        catch(error) {
+        catch (error) {
 
             console.log(error);
 
@@ -420,391 +289,70 @@ function stopConversation() {
     window.speechSynthesis.cancel();
 
 
-    document.getElementById(
-        "startButton"
-    ).style.display = "block";
+    document.getElementById("startButton").style.display =
+        "block";
+
+    document.getElementById("stopButton").style.display =
+        "none";
 
 
-    document.getElementById(
-        "stopButton"
-    ).style.display = "none";
+    document.getElementById("status").innerText =
+        "⏹️ 對話已停止";
 
 
-    document.getElementById(
-        "language"
-    ).innerText =
-    "已停止";
-
-
-    document.getElementById(
-        "status"
-    ).innerText =
-    "⏹️ 對話已停止";
+    document.getElementById("direction").innerText =
+        "準備開始";
 
 }
 
 
-
-/*
-========================================
-開始聆聽
-========================================
-*/
-
+/* ================================
+   開始聆聽
+================================ */
 
 function listen() {
 
-
-    if (!running) {
-
+    if (!conversationRunning) {
         return;
-
     }
-
-
-    if (listening) {
-
-        return;
-
-    }
-
-
-    listening = true;
 
 
     recognition =
-    new SpeechRecognition();
+        new SpeechRecognition();
 
 
-    /*
-    這裡使用英文辨識器作為主要入口。
+    if (currentTurn === "zh") {
 
-    接收到文字後，
-    再利用文字內容判斷
-    中文或英文。
+        recognition.lang =
+            "zh-TW";
 
-    */
+        document.getElementById("status").innerText =
+            "🎤 請說中文";
 
+        document.getElementById("direction").innerText =
+            "🇨🇳 中文 → 🇬🇧 English";
 
-    recognition.lang =
-    "en-US";
+    }
 
+    else {
 
-    recognition.continuous =
-    false;
+        recognition.lang =
+            "en-US";
+
+        document.getElementById("status").innerText =
+            "🎤 Please speak English";
+
+        document.getElementById("direction").innerText =
+            "🇬🇧 English → 🇨🇳 中文";
+
+    }
 
 
     recognition.interimResults =
-    false;
+        false;
 
-
-    recognition.maxAlternatives =
-    1;
-
-
-
-    recognition.onstart =
-    function() {
-
-        document.getElementById(
-            "status"
-        ).innerText =
-        "🎤 正在聆聽……";
-
-    };
-
-
-
-    recognition.onresult =
-    async function(event) {
-
-
-        listening = false;
-
-
-        const text =
-        event.results[0][0]
-        .transcript
-        .trim();
-
-
-        if (!text) {
-
-            restartListening();
-
-            return;
-
-        }
-
-
-        document.getElementById(
-            "original"
-        ).innerText =
-        text;
-
-
-        /*
-        ====================================
-        自動判斷語言
-        ====================================
-        */
-
-
-        const language =
-        detectLanguage(text);
-
-
-        /*
-        中文
-        */
-
-
-        if (language === "zh") {
-
-
-            document.getElementById(
-                "language"
-            ).innerText =
-            "🇨🇳 偵測到中文";
-
-
-        }
-
-
-        /*
-        英文
-        */
-
-
-        else {
-
-
-            document.getElementById(
-                "language"
-            ).innerText =
-            "🇬🇧 偵測到英文";
-
-        }
-
-
-        document.getElementById(
-            "status"
-        ).innerText =
-        "🌐 正在翻譯……";
-
-
-        /*
-        ====================================
-        決定翻譯方向
-        ====================================
-        */
-
-
-        let languagePair;
-
-        let voiceLanguage;
-
-
-        if (language === "zh") {
-
-
-            languagePair =
-            "zh-TW|en";
-
-
-            voiceLanguage =
-            "en-US";
-
-
-        }
-
-        else {
-
-
-            languagePair =
-            "en|zh-TW";
-
-
-            voiceLanguage =
-            "zh-TW";
-
-        }
-
-
-
-        /*
-        ====================================
-        翻譯
-        ====================================
-        */
-
-
-        const translated =
-        await translateText(
-            text,
-            languagePair
-        );
-
-
-        if (!running) {
-
-            return;
-
-        }
-
-
-        if (!translated) {
-
-
-            document.getElementById(
-                "status"
-            ).innerText =
-            "⚠️ 翻譯失敗，重新聆聽";
-
-
-            restartListening();
-
-
-            return;
-
-        }
-
-
-        document.getElementById(
-            "translated"
-        ).innerText =
-        translated;
-
-
-        /*
-        ====================================
-        播放
-        ====================================
-        */
-
-
-        document.getElementById(
-            "status"
-        ).innerText =
-        "🔊 正在播放翻譯結果……";
-
-
-        speakText(
-            translated,
-            voiceLanguage,
-            function() {
-
-                if (!running) {
-
-                    return;
-
-                }
-
-
-                setTimeout(
-                    listen,
-                    500
-                );
-
-            }
-        );
-
-    };
-
-
-
-    recognition.onerror =
-    function(event) {
-
-
-        listening = false;
-
-
-        console.log(
-            "Speech recognition:",
-            event.error
-        );
-
-
-        if (!running) {
-
-            return;
-
-        }
-
-
-        if (
-            event.error ===
-            "not-allowed"
-        ) {
-
-
-            document.getElementById(
-                "status"
-            ).innerText =
-            "⚠️ 請允許 Safari 使用麥克風";
-
-
-            return;
-
-        }
-
-
-        if (
-            event.error ===
-            "no-speech"
-        ) {
-
-
-            document.getElementById(
-                "status"
-            ).innerText =
-            "🎤 沒有聽到聲音，再試一次";
-
-
-            setTimeout(
-                listen,
-                500
-            );
-
-
-            return;
-
-        }
-
-
-        setTimeout(
-            listen,
-            1000
-        );
-
-    };
-
-
-
-    recognition.onend =
-    function() {
-
-
-        listening = false;
-
-
-        /*
-        如果沒有收到結果，
-        自動重新聆聽。
-        */
-
-
-        if (running) {
-
-            setTimeout(
-                listen,
-                300
-            );
-
-        }
-
-    };
+    recognition.continuous =
+        false;
 
 
     try {
@@ -813,137 +361,229 @@ function listen() {
 
     }
 
-    catch(error) {
+    catch (error) {
 
         console.log(error);
 
-        listening = false;
-
     }
+
+
+    recognition.onresult =
+        async function(event) {
+
+            const text =
+                event.results[0][0].transcript;
+
+
+            document.getElementById("original").innerText =
+                text;
+
+
+            document.getElementById("status").innerText =
+                "🌐 正在翻譯...";
+
+
+            let languagePair;
+
+            let voiceLanguage;
+
+
+            if (currentTurn === "zh") {
+
+                languagePair =
+                    "zh-TW|en-GB";
+
+                voiceLanguage =
+                    "en-US";
+
+            }
+
+            else {
+
+                languagePair =
+                    "en-US|zh-TW";
+
+                voiceLanguage =
+                    "zh-TW";
+
+            }
+
+
+            const translated =
+                await translateText(
+                    text,
+                    languagePair
+                );
+
+
+            if (!conversationRunning) {
+                return;
+            }
+
+
+            if (translated) {
+
+                document.getElementById("translated").innerText =
+                    translated;
+
+
+                lastTranslation =
+                    translated;
+
+
+                lastVoiceLanguage =
+                    voiceLanguage;
+
+
+                document.getElementById("status").innerText =
+                    "🔊 正在播放翻譯結果...";
+
+
+                speakText(
+                    translated,
+                    voiceLanguage,
+                    function() {
+
+                        if (!conversationRunning) {
+                            return;
+                        }
+
+
+                        /*
+
+                        中文說完
+                        → 換英文
+
+                        英文說完
+                        → 換中文
+
+                        */
+
+                        if (currentTurn === "zh") {
+
+                            currentTurn =
+                                "en";
+
+                        }
+
+                        else {
+
+                            currentTurn =
+                                "zh";
+
+                        }
+
+
+                        setTimeout(function() {
+
+                            listen();
+
+                        }, 800);
+
+                    }
+
+                );
+
+            }
+
+            else {
+
+                document.getElementById("status").innerText =
+                    "⚠️ 翻譯失敗，準備再試一次。";
+
+
+                setTimeout(function() {
+
+                    listen();
+
+                }, 1500);
+
+            }
+
+        };
+
+
+    recognition.onerror =
+        function(event) {
+
+            console.log(
+                "Speech recognition error:",
+                event.error
+            );
+
+
+            if (!conversationRunning) {
+                return;
+            }
+
+
+            if (
+                event.error ===
+                "not-allowed"
+            ) {
+
+                document.getElementById("status").innerText =
+                    "⚠️ 請允許 Safari 使用麥克風。";
+
+                return;
+
+            }
+
+
+            if (
+                event.error ===
+                "no-speech"
+            ) {
+
+                document.getElementById("status").innerText =
+                    "⚠️ 沒有聽到聲音，再試一次...";
+
+
+                setTimeout(function() {
+
+                    listen();
+
+                }, 1000);
+
+
+                return;
+
+            }
+
+
+            document.getElementById("status").innerText =
+                "⚠️ 語音辨識發生問題：" +
+                event.error;
+
+        };
 
 }
 
 
-
-/*
-========================================
-重新聆聽
-========================================
-*/
-
-
-function restartListening() {
-
-
-    if (!running) {
-
-        return;
-
-    }
-
-
-    setTimeout(
-        listen,
-        600
-    );
-
-}
-
-
-
-/*
-========================================
-判斷中文 / 英文
-========================================
-*/
-
-
-function detectLanguage(text) {
-
-
-    /*
-    中文字數
-    */
-
-
-    const chinese =
-    (
-        text.match(
-            /[\u4e00-\u9fff]/g
-        ) || []
-    ).length;
-
-
-    /*
-    英文字母
-    */
-
-
-    const english =
-    (
-        text.match(
-            /[A-Za-z]/g
-        ) || []
-    ).length;
-
-
-    /*
-    中文比較多
-    */
-
-
-    if (
-        chinese > english
-    ) {
-
-        return "zh";
-
-    }
-
-
-    /*
-    否則當成英文
-    */
-
-
-    return "en";
-
-}
-
-
-
-/*
-========================================
-翻譯 API
-========================================
-*/
-
+/* ================================
+   翻譯
+================================ */
 
 async function translateText(
     text,
     languagePair
 ) {
 
-
     try {
 
-
         const url =
-        "https://api.mymemory.translated.net/get?q="
-        +
-        encodeURIComponent(text)
-        +
-        "&langpair="
-        +
-        encodeURIComponent(languagePair);
+            "https://api.mymemory.translated.net/get?q=" +
+            encodeURIComponent(text) +
+            "&langpair=" +
+            encodeURIComponent(languagePair);
 
 
         const response =
-        await fetch(url);
+            await fetch(url);
 
 
         const data =
-        await response.json();
+            await response.json();
 
 
         if (
@@ -952,23 +592,18 @@ async function translateText(
             data.responseData.translatedText
         ) {
 
-
-            return
-            data.responseData.translatedText;
+            return data.responseData.translatedText;
 
         }
 
 
         return null;
 
-
     }
 
-    catch(error) {
-
+    catch (error) {
 
         console.log(error);
-
 
         return null;
 
@@ -977,13 +612,9 @@ async function translateText(
 }
 
 
-
-/*
-========================================
-語音播放
-========================================
-*/
-
+/* ================================
+   語音播放
+================================ */
 
 function speakText(
     text,
@@ -991,17 +622,10 @@ function speakText(
     onFinished
 ) {
 
+    if (!window.speechSynthesis) {
 
-    if (
-        !window.speechSynthesis
-    ) {
-
-
-        document.getElementById(
-            "status"
-        ).innerText =
-        "⚠️ 此裝置不支援語音播放";
-
+        document.getElementById("status").innerText =
+            "⚠️ 此裝置不支援語音播放。";
 
         return;
 
@@ -1012,60 +636,71 @@ function speakText(
 
 
     const utterance =
-    new SpeechSynthesisUtterance(
-        text
-    );
-
-
-    utterance.lang =
-    language;
-
-
-    utterance.rate =
-    0.9;
-
-
-    utterance.pitch =
-    1;
-
-
-    utterance.volume =
-    1;
-
-
-    utterance.onend =
-    function() {
-
-
-        if (onFinished) {
-
-            onFinished();
-
-        }
-
-    };
-
-
-    utterance.onerror =
-    function(error) {
-
-
-        console.log(
-            "Speech error:",
-            error
+        new SpeechSynthesisUtterance(
+            text
         );
 
 
-        if (onFinished) {
+    utterance.lang =
+        language;
 
-            setTimeout(
-                onFinished,
-                500
+
+    utterance.rate =
+        0.9;
+
+
+    utterance.pitch =
+        1;
+
+
+    utterance.volume =
+        1;
+
+
+    utterance.onstart =
+        function() {
+
+            document.getElementById("status").innerText =
+                "🔊 正在播放翻譯結果...";
+
+        };
+
+
+    utterance.onend =
+        function() {
+
+            if (onFinished) {
+
+                onFinished();
+
+            }
+
+        };
+
+
+    utterance.onerror =
+        function(event) {
+
+            console.log(
+                "Speech synthesis error:",
+                event
             );
 
-        }
 
-    };
+            document.getElementById("status").innerText =
+                "⚠️ 語音播放失敗";
+
+
+            if (onFinished) {
+
+                setTimeout(
+                    onFinished,
+                    1000
+                );
+
+            }
+
+        };
 
 
     window.speechSynthesis.speak(
@@ -1075,34 +710,25 @@ function speakText(
 }
 
 
-
-/*
-========================================
-iPhone Safari 語音啟用
-========================================
-*/
-
+/* ================================
+   iPhone Safari 語音啟用
+================================ */
 
 function unlockSpeech() {
 
-
-    if (
-        !window.speechSynthesis
-    ) {
-
+    if (!window.speechSynthesis) {
         return;
-
     }
 
 
     const utterance =
-    new SpeechSynthesisUtterance(
-        " "
-    );
+        new SpeechSynthesisUtterance(
+            " "
+        );
 
 
     utterance.volume =
-    0;
+        0;
 
 
     window.speechSynthesis.cancel();
@@ -1114,11 +740,8 @@ function unlockSpeech() {
 
 }
 
-
 </script>
 
-
 </body>
-
 </html>
 ```
