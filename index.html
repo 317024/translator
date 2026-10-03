@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>「導」向世界｜雙語語音翻譯助手</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, "Microsoft JhengHei", sans-serif;
+            background: #f5f7fa;
+            color: #222;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: auto;
+            padding: 25px 18px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #555;
+            margin-bottom: 25px;
+        }
+
+        .mode {
+            background: white;
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+        }
+
+        .mode h2 {
+            margin-top: 0;
+            font-size: 22px;
+        }
+
+        button {
+            width: 100%;
+            padding: 18px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 14px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #222;
+            color: white;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
+            min-height: 28px;
+        }
+
+        .result {
+            background: white;
+            border-radius: 18px;
+            padding: 20px;
+            margin-top: 18px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+        }
+
+        .label {
+            font-size: 15px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .text {
+            font-size: 21px;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .small {
+            text-align: center;
+            color: #777;
+            font-size: 14px;
+            margin-top: 25px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>「導」向世界</h1>
+
+    <div class="subtitle">
+        雙語語音翻譯助手
+    </div>
+
+    <div class="mode">
+
+        <h2>🇨🇳 中文 → 🇬🇧 English</h2>
+
+        <button onclick="startTranslation('zh-TW', 'zh-TW|en-GB', 'en-US')">
+            🎤 開始說中文
+        </button>
+
+    </div>
+
+
+    <div class="mode">
+
+        <h2>🇬🇧 English → 🇨🇳 中文</h2>
+
+        <button onclick="startTranslation('en-US', 'en-US|zh-TW', 'zh-TW')">
+            🎤 Speak English
+        </button>
+
+    </div>
+
+
+    <div class="status" id="status">
+        請選擇翻譯方向
+    </div>
+
+
+    <div class="result">
+
+        <div class="label">
+            你說：
+        </div>
+
+        <div class="text" id="original">
+            尚未開始
+        </div>
+
+    </div>
+
+
+    <div class="result">
+
+        <div class="label">
+            翻譯結果：
+        </div>
+
+        <div class="text" id="translated">
+            尚未翻譯
+        </div>
+
+    </div>
+
+
+    <div class="small">
+        目前版本需要網路連線
+    </div>
+
+</div>
+
+
+<script>
+
+const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+
+async function startTranslation(
+    speechLanguage,
+    languagePair,
+    voiceLanguage
+) {
+
+    if (!SpeechRecognition) {
+
+        document.getElementById("status").innerText =
+            "⚠️ 此瀏覽器不支援語音辨識，請使用支援語音辨識的瀏覽器。";
+
+        return;
+    }
+
+
+    const recognition = new SpeechRecognition();
+
+    recognition.lang = speechLanguage;
+
+    recognition.interimResults = false;
+
+    recognition.continuous = false;
+
+
+    document.getElementById("status").innerText =
+        "🎤 正在聽，請開始說話...";
+
+
+    recognition.start();
+
+
+    recognition.onresult = async function(event) {
+
+        const text =
+            event.results[0][0].transcript;
+
+
+        document.getElementById("original").innerText =
+            text;
+
+
+        document.getElementById("status").innerText =
+            "🌐 正在翻譯...";
+
+
+        const translated =
+            await translateText(
+                text,
+                languagePair
+            );
+
+
+        if (translated) {
+
+            document.getElementById("translated").innerText =
+                translated;
+
+
+            document.getElementById("status").innerText =
+                "🔊 正在播放翻譯結果...";
+
+
+            speakText(
+                translated,
+                voiceLanguage
+            );
+
+        } else {
+
+            document.getElementById("status").innerText =
+                "⚠️ 翻譯失敗，請再試一次。";
+        }
+
+    };
+
+
+    recognition.onerror = function(event) {
+
+        document.getElementById("status").innerText =
+            "⚠️ 語音辨識發生問題：" + event.error;
+
+    };
+
+
+    recognition.onend = function() {
+
+        if (
+            document.getElementById("status").innerText ===
+            "🎤 正在聽，請開始說話..."
+        ) {
+
+            document.getElementById("status").innerText =
+                "沒有聽到內容，請再試一次。";
+
+        }
+
+    };
+
+}
+
+
+async function translateText(
+    text,
+    languagePair
+) {
+
+    try {
+
+        const url =
+            "https://api.mymemory.translated.net/get?q=" +
+            encodeURIComponent(text) +
+            "&langpair=" +
+            encodeURIComponent(languagePair);
+
+
+        const response =
+            await fetch(url);
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            data &&
+            data.responseData &&
+            data.responseData.translatedText
+        ) {
+
+            return data.responseData.translatedText;
+
+        }
+
+
+        return null;
+
+    }
+
+    catch (error) {
+
+        console.log(error);
+
+        return null;
+
+    }
+
+}
+
+
+function speakText(
+    text,
+    language
+) {
+
+    window.speechSynthesis.cancel();
+
+
+    const utterance =
+        new SpeechSynthesisUtterance(text);
+
+
+    utterance.lang = language;
+
+    utterance.rate = 0.9;
+
+    utterance.pitch = 1;
+
+
+    utterance.onend = function() {
+
+        document.getElementById("status").innerText =
+            "✅ 完成！可以再選擇一次翻譯。";
+
+    };
+
+
+    window.speechSynthesis.speak(
+        utterance
+    );
+
+}
+
+</script>
+
+</body>
+</html>
